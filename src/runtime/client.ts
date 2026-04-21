@@ -15,6 +15,13 @@ async function fetchWithTimeout(url: string, options?: RequestInit, timeout = DE
   }
 }
 
+/**
+ * cloud.umami.is 以及新版自托管 Umami 对 share token 请求要求此头部，
+ * 缺失时所有 `/websites/*` 请求都会返回 401 Unauthorized。
+ */
+const SHARE_CONTEXT_HEADER = 'x-umami-share-context';
+const SHARE_CONTEXT_VALUE = '1';
+
 interface UmamiRuntimeConfig {
   shareUrl: string | false;
 }
@@ -23,6 +30,8 @@ interface StatsResult {
   pageviews: number;
   visitors: number;
   visits: number;
+  bounces?: number;
+  totaltime?: number;
   _fromCache?: boolean;
 }
 
@@ -178,7 +187,10 @@ class UmamiRuntimeClient {
     const res = await fetchWithTimeout(
       `${this.apiBase}/websites/${websiteId}/stats?${params.toString()}`,
       {
-        headers: { 'x-umami-share-token': token }
+        headers: {
+          'x-umami-share-token': token,
+          [SHARE_CONTEXT_HEADER]: SHARE_CONTEXT_VALUE
+        }
       }
     );
 
@@ -193,6 +205,12 @@ class UmamiRuntimeClient {
       visitors: data.visitors?.value ?? data.visitors ?? 0,
       visits: data.visits?.value ?? data.visits ?? 0
     };
+    if (typeof data.bounces === 'number' || typeof data.bounces?.value === 'number') {
+      result.bounces = data.bounces?.value ?? data.bounces;
+    }
+    if (typeof data.totaltime === 'number' || typeof data.totaltime?.value === 'number') {
+      result.totaltime = data.totaltime?.value ?? data.totaltime;
+    }
 
     this.cache.set(cacheKey, result);
 
@@ -207,6 +225,24 @@ class UmamiRuntimeClient {
     return this.getStats(path);
   }
 
+  async getActiveVisitors(): Promise<number> {
+    const { websiteId, token } = await this.getShareData();
+    const res = await fetchWithTimeout(
+      `${this.apiBase}/websites/${websiteId}/active`,
+      {
+        headers: {
+          'x-umami-share-token': token,
+          [SHARE_CONTEXT_HEADER]: SHARE_CONTEXT_VALUE
+        }
+      }
+    );
+    if (!res.ok) {
+      throw new Error(`获取在线访客失败: ${res.status}`);
+    }
+    const data = await res.json();
+    return typeof data?.visitors === 'number' ? data.visitors : 0;
+  }
+
   clearCache(): void {
     this.cache.clear();
     this.shareData = null;
@@ -219,6 +255,7 @@ function mountEmptyClient(): void {
     getStats: () => Promise.resolve({ pageviews: 0, visitors: 0, visits: 0 }),
     getSiteStats: () => Promise.resolve({ pageviews: 0, visitors: 0, visits: 0 }),
     getPageStats: () => Promise.resolve({ pageviews: 0, visitors: 0, visits: 0 }),
+    getActiveVisitors: () => Promise.resolve(0),
     clearCache: () => {},
   };
 }
@@ -236,6 +273,7 @@ export function initUmamiRuntime(config: UmamiRuntimeConfig): void {
         getStats: (path?: string) => client.getStats(path),
         getSiteStats: () => client.getSiteStats(),
         getPageStats: (path: string) => client.getPageStats(path),
+        getActiveVisitors: () => client.getActiveVisitors(),
         clearCache: () => client.clearCache(),
       };
 
@@ -261,6 +299,7 @@ interface OddmiscReadyEvent extends CustomEvent {
       getStats: (path?: string) => Promise<StatsResult>;
       getSiteStats: () => Promise<StatsResult>;
       getPageStats: (path: string) => Promise<StatsResult>;
+      getActiveVisitors: () => Promise<number>;
       clearCache: () => void;
     };
   };

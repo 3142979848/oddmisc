@@ -47,6 +47,29 @@ const site = await client.getSiteStats();
 
 所有查询都会被缓存，命中缓存时返回值上会带有 `_fromCache: true` 字段，可据此判断来源。调用 `client.clearCache()` 可清空缓存。
 
+除了基础统计，还可以读取在线访客、时间序列、TopN 维度聚合等：
+
+```ts
+// 当前在线访客（实时，不缓存）
+const live = await client.getActiveVisitors();
+
+// 按小时聚合的 pageviews / sessions 序列
+const series = await client.getPageviews({
+  startAt: Date.now() - 24 * 3600_000,
+  endAt: Date.now(),
+  unit: 'hour',
+  timezone: 'Asia/Shanghai'
+});
+
+// Top 10 路径 / 国家 / 浏览器
+const topPaths = await client.getMetrics('path', { limit: 10 });
+const topCountries = await client.getMetrics('country', { limit: 10 });
+
+// 网站元信息 / 可用数据区间
+const info = await client.getWebsite();
+const range = await client.getDateRange();
+```
+
 ### Astro 集成
 
 在 `astro.config.mjs` 中加入：
@@ -101,21 +124,46 @@ window.addEventListener('oddmisc-ready', (e) => {
 
 返回的 `UmamiClient` 实例提供：
 
-- `getPageStats(path, options?)`：按 `path` 查询（底层等价于 `path=eq.<path>`）。
-- `getPageStatsByUrl(url, options?)`：按完整 URL 查询。
-- `getSiteStats(options?)`：站点整体统计。
-- `clearCache()`：清空内存 + localStorage 缓存，以及已缓存的 share token。
+| 方法 | 说明 |
+| --- | --- |
+| `getPageStats(path, options?)` | 按 `path` 查询（底层等价于 `path=eq.<path>`） |
+| `getPageStatsByUrl(url, options?)` | 按完整 URL 查询 |
+| `getSiteStats(options?)` | 站点整体统计 |
+| `getActiveVisitors()` | 当前在线访客数（实时，不缓存） |
+| `getPageviews({ startAt, endAt, unit, timezone }?)` | 按时间聚合的 `pageviews` / `sessions` 序列 |
+| `getMetrics(type, { startAt, endAt, limit }?)` | TopN 维度聚合 |
+| `getWebsite()` | 网站元信息（`name` / `domain` 等） |
+| `getDateRange()` | 此分享可用的数据范围 |
+| `clearCache()` | 清空内存 + localStorage 缓存，以及已缓存的 share token |
 
-统一的返回结构：
+`options` 支持 `startAt` / `endAt`（毫秒时间戳），默认 `startAt=0` 到 `endAt=Date.now()`，即「建站起至今」。
+
+`getMetrics(type)` 支持的维度（与 Umami v2 对齐）：`path`、`referrer`、`browser`、`os`、`device`、`country`、`region`、`city`、`event`、`title`、`language`、`screen`、`tag`。**注意** `cloud.umami.is` 对 `url` / `host` 会返回 400，因此这两种没有放在类型中。
+
+统一的统计返回结构：
 
 ```ts
 interface StatsResult {
   pageviews: number;
   visitors: number;
   visits: number;
+  /** Umami v2+ 返回，表示跳出数 */
+  bounces?: number;
+  /** Umami v2+ 返回，总访问时长（秒） */
+  totaltime?: number;
+  /** Umami v2+ 返回，与上一周期的对比 */
+  comparison?: {
+    pageviews?: number;
+    visitors?: number;
+    visits?: number;
+    bounces?: number;
+    totaltime?: number;
+  };
   _fromCache?: boolean;
 }
 ```
+
+> 针对 `cloud.umami.is` 与新版自托管 Umami，内部会自动附带 `x-umami-share-context: 1` 头；缺失该头时服务端会直接返回 401。
 
 ### 运行时 `initUmamiRuntime(config)`
 
@@ -140,6 +188,18 @@ initUmamiRuntime({ shareUrl: 'https://.../share/<id>' });
 
 - `parseShareUrl(shareUrl)` — 解析分享链接，返回 `{ apiBase, shareId }`。
 - `CacheManager` — 通用的内存 + localStorage 双级缓存，可在其它场景复用。
+
+## 关于 Umami 分享 API
+
+经 `cloud.umami.is` 线上验证，本库使用如下端点（均以 `x-umami-share-token` + `x-umami-share-context: 1` 双头进行认证）：
+
+- `GET /api/share/<shareId>` — 解析 shareId，得到 `websiteId` + JWT `token`
+- `GET /api/websites/<websiteId>` — 网站元信息
+- `GET /api/websites/<websiteId>/stats?startAt&endAt[&path|url]` — 聚合统计
+- `GET /api/websites/<websiteId>/active` — 当前在线访客
+- `GET /api/websites/<websiteId>/pageviews?startAt&endAt&unit&timezone` — 时间序列
+- `GET /api/websites/<websiteId>/metrics?startAt&endAt&type[&limit]` — TopN 聚合
+- `GET /api/websites/<websiteId>/daterange` — 可用数据区间
 
 ## 支持的 Umami URL 格式
 
