@@ -11,7 +11,7 @@ interface StatsQueryParams {
 interface StatsResult {
   pageviews: number;
   visitors: number;
-  visits?: number;
+  visits: number;
   _fromCache?: boolean;
 }
 

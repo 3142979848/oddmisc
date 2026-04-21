@@ -60,6 +60,9 @@ export class UmamiAPI {
     if (params.path) {
       queryParams.set('path', params.path);
     }
+    if (params.url) {
+      queryParams.set('url', params.url);
+    }
 
     const statsUrl = `${baseUrl}/websites/${websiteId}/stats?${queryParams.toString()}`;
 

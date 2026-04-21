@@ -1,6 +1,7 @@
 import { CacheManager } from '../../utils/umami/cache';
 import { UmamiAPI } from './api';
 import { parseShareUrl } from '../../utils/umami/url-parser';
+import { UmamiUrlError } from '../../errors';
 import type { UmamiConfig, StatsResult, StatsQueryParams } from './types';
 
 function extractValue(field: number | { value: number } | undefined): number {
@@ -16,7 +17,7 @@ export class UmamiClient {
 
   constructor(config: UmamiConfig) {
     if (!config.shareUrl) {
-      throw new Error('shareUrl 是必需参数');
+      throw new UmamiUrlError('shareUrl 是必需参数');
     }
 
     const { apiBase, shareId } = parseShareUrl(config.shareUrl);

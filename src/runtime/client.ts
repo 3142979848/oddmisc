@@ -22,7 +22,7 @@ interface UmamiRuntimeConfig {
 interface StatsResult {
   pageviews: number;
   visitors: number;
-  visits?: number;
+  visits: number;
   _fromCache?: boolean;
 }
 
@@ -56,7 +56,6 @@ class SimpleCache {
   private cache = new Map<string, { value: unknown; timestamp: number }>();
   private storageKey: string;
   private ttl: number;
-  private storageCache: Record<string, { value: unknown; timestamp: number }> | null = null;
 
   constructor(storageKey: string, ttl: number) {
     this.storageKey = storageKey;
@@ -65,13 +64,16 @@ class SimpleCache {
   }
 
   private loadFromStorage(): void {
-    if (this.storageCache !== null) return;
     try {
       const stored = localStorage.getItem(this.storageKey);
-      this.storageCache = stored ? JSON.parse(stored) : {};
-    } catch {
-      this.storageCache = {};
-    }
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as Record<string, { value: unknown; timestamp: number }>;
+      for (const [key, entry] of Object.entries(parsed)) {
+        if (entry && typeof entry.timestamp === 'number' && !this.isExpired(entry.timestamp)) {
+          this.cache.set(key, entry);
+        }
+      }
+    } catch {}
   }
 
   private saveToStorage(): void {
@@ -81,7 +83,6 @@ class SimpleCache {
         obj[key] = value;
       });
       localStorage.setItem(this.storageKey, JSON.stringify(obj));
-      this.storageCache = obj;
     } catch {}
   }
 
@@ -96,6 +97,7 @@ class SimpleCache {
     }
     if (cached) {
       this.cache.delete(key);
+      this.saveToStorage();
     }
     return null;
   }
@@ -108,7 +110,6 @@ class SimpleCache {
 
   clear(): void {
     this.cache.clear();
-    this.storageCache = null;
     try {
       localStorage.removeItem(this.storageKey);
     } catch {}
