@@ -89,18 +89,18 @@ export class UmamiClient {
     return { pageviews: data.pageviews ?? [], sessions: data.sessions ?? [] };
   }
 
-  /** 获取 TopN 维度聚合，例如 top 路径、国家、浏览器 */
-  async getMetrics(type: MetricType, options: MetricsParams = {}): Promise<MetricEntry[]> {
+  /** Top N 维度聚合（top 路径 / 国家 / 浏览器等） */
+  getMetrics(type: MetricType, options: MetricsParams = {}): Promise<MetricEntry[]> {
     return this.api.getMetrics(this.baseUrl, this.shareId, type, options);
   }
 
   /** 网站元信息（name / domain 等） */
-  async getWebsite(): Promise<WebsiteInfo> {
+  getWebsite(): Promise<WebsiteInfo> {
     return this.api.getWebsite(this.baseUrl, this.shareId);
   }
 
   /** 此分享可用的数据范围 */
-  async getDateRange(): Promise<DateRange> {
+  getDateRange(): Promise<DateRange> {
     return this.api.getDateRange(this.baseUrl, this.shareId);
   }
 
